@@ -1,0 +1,247 @@
+# Chinese Character Groups (1001–1500 Range)
+Grouped by Shared Components — Chinese → English
+
+This file covers **expert → principal‑level wording**:
+platform engineering, governance, reliability engineering,
+large‑scale systems, and organizational processes.
+
+---
+
+## 平 / 衡 — Balance, equilibrium
+
+Core idea: **balance, trade‑off**
+
+- 平衡 — balance  
+- 负载均衡 — load balancing  
+- 权衡 — trade‑off  
+- 均衡器 — load balancer  
+
+Example wording:
+- 负载 均衡 策略 — load‑balancing strategy  
+
+---
+
+## 演 / 练 — Drills, preparedness
+
+Core idea: **practice, rehearsal**
+
+- 演练 — drill  
+- 压测 — stress test  
+- 压力测试 — load testing  
+- 故障演练 — fault drill  
+
+Example wording:
+- 定期 演练 — run drills regularly  
+
+---
+
+## 灾 / 备 — Disaster recovery
+
+Core idea: **disaster, backup readiness**
+
+- 灾备 — disaster recovery  
+- 灾难恢复 — disaster recovery  
+- 容灾 — fault‑tolerant DR  
+- 双活 — active‑active  
+- 备机 — standby system  
+
+Example wording:
+- 灾备 架构 — disaster‑recovery architecture  
+
+---
+
+## 回 / 放 — Replay, rollback, reprocess
+
+Core idea: **go back, replay events**
+
+- 回放 — replay  
+- 回溯 — trace back  
+- 回滚 — rollback  
+- 重放 — reprocess  
+
+Example wording:
+- 日志 回放 — log replay  
+
+---
+
+## 升 / 级 — Upgrade, evolution
+
+Core idea: **step‑by‑step improvement**
+
+- 升级 — upgrade  
+- 演进 — evolve  
+- 版本演进 — version evolution  
+- 技术升级 — technology upgrade  
+
+Example wording:
+- 平滑 升级 — smooth upgrade  
+
+---
+
+## 向 / 后 — Compatibility, direction
+
+Core idea: **direction in time**
+
+- 向前兼容 — forward compatible  
+- 向后兼容 — backward compatible  
+- 兼容性 — compatibility  
+
+Example wording:
+- 向后 兼容 设计 — backward‑compatible design  
+
+---
+
+## 编 / 排 — Orchestration, coordination
+
+Core idea: **coordinate multiple parts**
+
+- 编排 — orchestrate  
+- 调度 — schedule  
+- 调度器 — scheduler  
+- 编排系统 — orchestration system  
+
+Example wording:
+- 服务 编排 — service orchestration  
+
+---
+
+## 申 / 请 — Request, approval
+
+Core idea: **request, apply**
+
+- 请求 — request  
+- 申请 — apply  
+- 授权申请 — authorization request  
+- 变更申请 — change request  
+
+Example wording:
+- 权限 申请 — permission request  
+
+---
+
+## 批 / 准 — Approval, gatekeeping
+
+Core idea: **approve, allow**
+
+- 批准 — approve  
+- 审批 — approval  
+- 审核 — audit / review  
+- 审计 — audit  
+
+Example wording:
+- 变更 审批 — change approval  
+
+---
+
+## 策 / 略 — Strategy, policy
+
+Core idea: **high‑level rules**
+
+- 策略 — strategy / policy  
+- 策略控制 — policy control  
+- 调控策略 — regulation strategy  
+
+Example wording:
+- 限流 策略 — rate‑limit policy  
+
+---
+
+## 规 / 范 —规范, standards
+
+Core idea: **rules, standards**
+
+- 规范 — specification  
+- 标准 — standard  
+- 约定 — convention  
+- 最佳实践 — best practice  
+
+Example wording:
+- 编码 规范 — coding standards  
+
+---
+
+## 责 / 任 — Responsibility, ownership
+
+Core idea: **who owns what**
+
+- 责任 — responsibility  
+- 职责 — duty  
+- 责任人 — owner  
+- 问责 — accountability  
+
+Example wording:
+- 明确 责任人 — define ownership  
+
+---
+
+## 协 / 作 — Collaboration
+
+Core idea: **work together**
+
+- 协作 — collaboration  
+- 配合 — cooperate  
+- 对接 — integrate (teams)  
+- 沟通 — communicate  
+
+Example wording:
+- 跨 团队 协作 — cross‑team collaboration  
+
+---
+
+## 路 / 线 — Roadmap, direction
+
+Core idea: **long‑term direction**
+
+- 路线图 — roadmap  
+- 技术路线 — technical roadmap  
+- 长期规划 — long‑term planning  
+
+Example wording:
+- 技术 路线 图 — technology roadmap  
+
+---
+
+## 隐 / 藏 — Isolation, masking
+
+Core idea: **hide, shield**
+
+- 隐藏 — hide  
+- 屏蔽 — shield  
+- 脱敏 — mask data  
+- 隐私 — privacy  
+
+Example wording:
+- 数据 脱敏 — data masking  
+
+---
+
+## 精 / 细 — Precision, optimization depth
+
+Core idea: **fine‑grained control**
+
+- 精细化 — fine‑grained  
+- 精度 — precision  
+- 细化 — refine  
+- 优化 — optimize  
+
+Example wording:
+- 精细 化 控制 — fine‑grained control  
+
+---
+
+## 总结 — What 1001–1500 represents
+
+At this range you are reading:
+- **platform strategy**
+- **organizational processes**
+- **enterprise‑level system design**
+- **governance & evolution language**
+
+This is the level used in:
+- architecture review boards
+- platform teams
+- senior technical documentation
+
+---
+
+END OF FILE
