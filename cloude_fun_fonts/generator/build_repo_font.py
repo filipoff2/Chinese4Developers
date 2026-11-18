@@ -4,14 +4,17 @@ Characters: every CJK character found in the repo's text files (.md, .json, .txt
 without extension; the cloude_fun_fonts folder is skipped). Other characters in those files
 (Latin, pinyin, punctuation) are kept uncolored.
 
-Coloring:
-  1. Characters in hanzi-120.json get the role colors of the lesson (semantic / phonetic /
-     neutral, see 120_Common_Chinese_Characters_Component_Colored.md):
-     - one component: the whole character in that role color;
-     - several components: each component in its own role color. The Source Han Sans
-       outline pieces are assigned to components with the stroke data of Make Me a Hanzi.
-       If that is not clean, the character falls back to 2.
-  2. All other characters: one color by radical (Unihan kRSUnicode -> one of 20 color groups).
+Coloring (--scheme components, the default): the goal is to see the parts of a character.
+  - Every character is split into its top-level parts (Make Me a Hanzi decomposition, e.g.
+    想 = 相 + 心). The Source Han Sans outline pieces are assigned to the parts with the
+    Make Me a Hanzi stroke data.
+  - Each part gets the color of that component, the same everywhere: radicals (心 忄 亻 氵 ...)
+    their meaning-based group, other components a fixed group of their own. If two parts of
+    one character would get the same color, the non-radical part moves to the next color.
+  - Characters with one part, or whose outline can't be split cleanly, get one color.
+
+--scheme roles: the earlier coloring. hanzi-120.json characters in the lesson's role colors
+(semantic / phonetic / neutral), all others one color by radical.
 
 Usage (from the cloude_fun_fonts folder):
     .venv\\Scripts\\python generator\\fetch_data.py                 # once
@@ -27,6 +30,7 @@ import re
 import subprocess
 import sys
 import zipfile
+import zlib
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -62,10 +66,14 @@ BASE_PLAIN = "".join(chr(c) for c in range(0x20, 0x7F)) + "，。！？、：；
 GROUP_INDEX = {name: i for i, (name, _) in enumerate(COLOR_GROUPS)}
 ROLE_INDEX = {role: len(COLOR_GROUPS) + i for i, (role, _) in enumerate(ROLE_COLORS)}
 
-# Component split: sample grid (font units) and the minimum share of votes one component
-# needs for an outline piece. Below that the piece belongs to several components.
+GROUP_COLOR = dict(COLOR_GROUPS)
+
+# Component split: sample grid (font units) and the minimum share of votes one part needs for
+# an outline piece (0 = the majority always wins; low shares are listed in report.md).
 GRID_STEP = 12
-MIN_SHARE = 0.6
+MIN_SHARE = 0.0
+# Minimum color distance between different parts of one character (see color_distance).
+MIN_CONTRAST = 160
 IDC_TERNARY = "⿲⿳"
 
 
@@ -91,7 +99,7 @@ def collect_repo_text(repo_dir):
 
 
 def load_radicals(zip_path):
-    """Unihan kRSUnicode: character -> Kangxi radical number (first value)."""
+    """Unihan kRSUnicode: character -> (Kangxi radical number, additional strokes), first value."""
     radicals = {}
     with zipfile.ZipFile(zip_path) as archive:
         for name in archive.namelist():
@@ -99,7 +107,8 @@ def load_radicals(zip_path):
                 if "\tkRSUnicode\t" not in line:
                     continue
                 code, _, value = line.split("\t")
-                radicals[chr(int(code[2:], 16))] = int(re.match(r"\d+", value).group())
+                match = re.match(r"(\d+)'*\.(-?\d+)", value)
+                radicals[chr(int(code[2:], 16))] = (int(match.group(1)), int(match.group(2)))
     return radicals
 
 
@@ -314,24 +323,21 @@ class SplitFailed(Exception):
     pass
 
 
-def split_into_components(char, entry, mmah_dict, mmah_graphics, contours, glyph_set):
-    """Assign the glyph's outline pieces to the components of hanzi-120.json.
-
-    Returns ({json component index: [contours]}, lowest vote share).
-    """
-    components = entry["components"]
-    info, graphics = mmah_dict.get(char), mmah_graphics.get(char)
-    if not info or not graphics:
-        raise SplitFailed("no Make Me a Hanzi data")
+def mmah_parts(char, mmah_dict):
+    """Top-level parts of a character from Make Me a Hanzi, or None if it has none."""
+    info = mmah_dict.get(char)
+    if not info:
+        return None
     tree, _ = parse_ids(info["decomposition"])
     if isinstance(tree, str):
-        raise SplitFailed(f"no decomposition ({info['decomposition']})")
-    parts = [flatten(child) for child in tree[1]]
-    if len(parts) != len(components):
-        raise SplitFailed(f"decomposition {info['decomposition']} has {len(parts)} parts, "
-                          f"hanzi-120.json has {len(components)}")
+        return None
+    return [flatten(child) for child in tree[1]]
 
-    # hanzi-120.json component -> Make Me a Hanzi part: same glyph first, rest in order.
+
+def map_json_components(components, parts):
+    """hanzi-120.json component index -> Make Me a Hanzi part index: same glyph first, rest in order."""
+    if len(parts) != len(components):
+        raise SplitFailed(f"decomposition has {len(parts)} parts, hanzi-120.json has {len(components)}")
     mapping, free_parts = {}, list(range(len(parts)))
     for i, component in enumerate(components):
         for j in free_parts:
@@ -342,6 +348,17 @@ def split_into_components(char, entry, mmah_dict, mmah_graphics, contours, glyph
     for i in range(len(components)):
         if i not in mapping:
             mapping[i] = free_parts.pop(0)
+    return mapping
+
+
+def split_parts(char, parts, mmah_dict, mmah_graphics, contours, glyph_set):
+    """Assign the glyph's outline pieces to the character's top-level parts.
+
+    Returns ({part index: [contours]}, lowest vote share).
+    """
+    info, graphics = mmah_dict.get(char), mmah_graphics.get(char)
+    if not info or not graphics:
+        raise SplitFailed("no Make Me a Hanzi data")
 
     # Stroke -> top-level part. Unmatched strokes go to the one part without strokes.
     stroke_part = [match[0] if match else None for match in info["matches"]]
@@ -385,10 +402,56 @@ def split_into_components(char, entry, mmah_dict, mmah_graphics, contours, glyph
     empty_parts = [parts[j] for j in range(len(parts)) if j not in pieces]
     if empty_parts:
         raise SplitFailed(f"part {'/'.join(empty_parts)} has no own outline piece")
-    return {i: pieces[j] for i, j in mapping.items()}, lowest_share
+    return pieces, lowest_share
 
 
-def build_color_layers(font, chars, hanzi, radicals, mmah_dict, mmah_graphics, neutral_mode):
+def component_group(component, radicals):
+    """Color group of a component: the same component always gets the same color.
+
+    Components that are radicals themselves (Unihan: radical + 0 strokes, e.g. 心 忄 亻 氵)
+    use the radical's group; all others get a fixed group derived from the component.
+    """
+    if "？" in component:
+        return "Chrome", False
+    for form in (component, canonical(component)):
+        radical = radicals.get(form)
+        if radical and radical[1] == 0:
+            return group_for_radical(radical[0])[0], True
+    return COLOR_GROUPS[zlib.crc32(canonical(component).encode()) % len(COLOR_GROUPS)][0], False
+
+
+def color_distance(a, b):
+    """'Redmean' RGB distance between two group colors (0 = same, ~765 = black/white)."""
+    (r1, g1, b1), (r2, g2, b2) = ([int(GROUP_COLOR[g][i:i + 2], 16) for i in (1, 3, 5)] for g in (a, b))
+    mean = (r1 + r2) / 2
+    return ((2 + mean / 256) * (r1 - r2) ** 2 + 4 * (g1 - g2) ** 2
+            + (2 + (255 - mean) / 256) * (b1 - b2) ** 2) ** 0.5
+
+
+def part_groups(parts, radicals):
+    """Groups for the parts of one character.
+
+    Different parts must be clearly different colors (MIN_CONTRAST); a part whose color is too
+    close to an earlier part's moves on to the next group. Radical parts go first, so they keep
+    their color; the same component twice (林 = 木 + 木) keeps one color.
+    """
+    wanted = [component_group(part, radicals) for part in parts]
+    groups = [None] * len(parts)
+    chosen = []  # (group, component)
+    for i in sorted(range(len(parts)), key=lambda i: not wanted[i][1]):
+        component = canonical(parts[i])
+        index = GROUP_INDEX[wanted[i][0]]
+        for _ in range(len(COLOR_GROUPS)):
+            group = COLOR_GROUPS[index][0]
+            if all(c == component or color_distance(group, g) >= MIN_CONTRAST for g, c in chosen):
+                break
+            index = (index + 1) % len(COLOR_GROUPS)
+        chosen.append((group, component))
+        groups[i] = group
+    return groups
+
+
+def build_color_layers(font, chars, hanzi, radicals, mmah_dict, mmah_graphics, scheme, neutral_mode):
     cmap = font.getBestCmap()
     glyph_set = font.getGlyphSet()
     layers, report = {}, []
@@ -398,50 +461,80 @@ def build_color_layers(font, chars, hanzi, radicals, mmah_dict, mmah_graphics, n
         if radical is None:
             group, how = COLOR_GROUPS[ord(char) % len(COLOR_GROUPS)][0], "no radical data"
         else:
-            group, mapped = group_for_radical(radical)
-            how = f"radical {radical} {chr(0x2F00 + radical - 1)}" + ("" if mapped else " (default group)")
+            group, mapped = group_for_radical(radical[0])
+            how = f"radical {radical[0]} {chr(0x2F00 + radical[0] - 1)}" + ("" if mapped else " (default group)")
         layers[base] = [(base, GROUP_INDEX[group])]
         return group, how
 
     def role_index(char, role):
         if role == "neutral" and neutral_mode == "radical":
-            group, _ = group_for_radical(radicals.get(char, 1))
+            group, _ = group_for_radical(radicals.get(char, (1, 0))[0])
             return GROUP_INDEX[group]
         return ROLE_INDEX[role]
+
+    def add_layers(base, pieces, colors):
+        layer_list = []
+        for i, (contours, color) in enumerate(zip(pieces, colors)):
+            name = f"{base}.p{i}"
+            add_glyph(font, name, contours, base)
+            layer_list.append((name, color))
+        layers[base] = layer_list
 
     for char in chars:
         base = cmap.get(ord(char))
         if base is None:
             report.append({"char": char, "mode": "missing", "note": "not in source font"})
             continue
-        entry = hanzi.get(char)
+        parts = mmah_parts(char, mmah_dict)
 
-        if entry and len(entry["components"]) == 1:
-            role = entry["components"][0]["role"]
-            layers[base] = [(base, role_index(char, role))]
-            report.append({"char": char, "mode": "role-whole", "note": role})
-            continue
-
-        if entry:
+        if scheme == "roles":
+            entry = hanzi.get(char)
+            if entry and len(entry["components"]) == 1:
+                role = entry["components"][0]["role"]
+                layers[base] = [(base, role_index(char, role))]
+                report.append({"char": char, "mode": "single", "note": f"{role} (hanzi-120.json)"})
+                continue
+            if not entry:
+                group, how = radical_layer(char, base)
+                report.append({"char": char, "mode": "radical", "note": f"{group} by {how}"})
+                continue
             try:
-                pieces, share = split_into_components(
-                    char, entry, mmah_dict, mmah_graphics, glyph_contours(glyph_set, base), glyph_set)
+                if not parts:
+                    raise SplitFailed("no decomposition")
+                mapping = map_json_components(entry["components"], parts)
+                pieces, share = split_parts(char, parts, mmah_dict, mmah_graphics,
+                                            glyph_contours(glyph_set, base), glyph_set)
             except SplitFailed as failure:
                 group, how = radical_layer(char, base)
                 report.append({"char": char, "mode": "fallback", "note": f"{failure}; {group} by {how}"})
                 continue
-            layer_list = []
-            for i, component in enumerate(entry["components"]):
-                name = f"{base}.p{i}"
-                add_glyph(font, name, pieces[i], base)
-                layer_list.append((name, role_index(char, component["role"])))
-            layers[base] = layer_list
-            parts = ", ".join(f"{c['glyph']} {c['role']}" for c in entry["components"])
-            report.append({"char": char, "mode": "role-parts", "note": f"{parts} (lowest share {share:.0%})"})
+            components = entry["components"]
+            add_layers(base, [pieces[mapping[i]] for i in range(len(components))],
+                       [role_index(char, c["role"]) for c in components])
+            note = ", ".join(f"{c['glyph']} {c['role']}" for c in components)
+            report.append({"char": char, "mode": "parts", "note": f"{note} (lowest share {share:.0%})"})
             continue
 
-        group, how = radical_layer(char, base)
-        report.append({"char": char, "mode": "radical", "note": f"{group} by {how}"})
+        # scheme == "components": every part in its own component color.
+        # Radicals themselves (氵 讠 月 ...) and characters without known parts stay whole.
+        is_radical = radicals.get(char, (0, -1))[1] == 0
+        if not parts or is_radical or all("？" in p for p in parts):
+            group, mapped = component_group(char, radicals)
+            layers[base] = [(base, GROUP_INDEX[group])]
+            report.append({"char": char, "mode": "single", "note": f"{group} (component {char})"})
+            continue
+        try:
+            pieces, share = split_parts(char, parts, mmah_dict, mmah_graphics,
+                                        glyph_contours(glyph_set, base), glyph_set)
+        except SplitFailed as failure:
+            group, how = radical_layer(char, base)
+            report.append({"char": char, "mode": "fallback",
+                           "note": f"{'+'.join(parts)}: {failure}; {group} by {how}"})
+            continue
+        groups = part_groups(parts, radicals)
+        add_layers(base, [pieces[j] for j in range(len(parts))], [GROUP_INDEX[g] for g in groups])
+        note = ", ".join(f"{p} {g}" for p, g in zip(parts, groups))
+        report.append({"char": char, "mode": "parts", "note": f"{note} (lowest share {share:.0%})"})
 
     return layers, report
 
@@ -451,9 +544,9 @@ def build_color_layers(font, chars, hanzi, radicals, mmah_dict, mmah_graphics, n
 # ---------------------------------------------------------------------------
 
 MODES = [
-    ("role-parts", "Components in role colors (hanzi-120.json)"),
-    ("role-whole", "One component, role color (hanzi-120.json)"),
-    ("fallback", "hanzi-120.json, split failed: radical color"),
+    ("parts", "Split into parts, each part in its own color"),
+    ("single", "One part only: one color"),
+    ("fallback", "Split failed: one radical color"),
     ("radical", "Radical color"),
     ("missing", "Not in the source font"),
 ]
@@ -552,10 +645,17 @@ def main():
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="SourceHanSansSC-VF.ttf")
     parser.add_argument("--build", type=int, default=DEFAULT_BUILD,
                         help="build number in the font name; bump it for every build you install")
+    parser.add_argument("--scheme", choices=["components", "roles"], default="components",
+                        help="components: split every character, each part in its own color (default); "
+                             "roles: lesson role colors for hanzi-120.json, radical color for the rest")
     parser.add_argument("--neutral", choices=["black", "radical"], default="black",
-                        help="color of 'neutral' components: black as in the lesson, or the radical color")
+                        help="roles scheme only: color of 'neutral' components")
+    parser.add_argument("--min-share", type=float, default=MIN_SHARE,
+                        help="minimum share of one part in an outline piece; below that the character "
+                             f"stays one color (default {MIN_SHARE})")
     parser.add_argument("--preview", action="store_true", help="also write preview.png (headless Edge)")
     args = parser.parse_args()
+    globals()["MIN_SHARE"] = args.min_share
 
     family = f"Hanzi4Dev Color {args.build}"
     ps_name = f"Hanzi4DevColor{args.build}-Regular"
@@ -567,7 +667,7 @@ def main():
 
     hanzi = json.loads(HANZI_JSON.read_text(encoding="utf-8"))["characters"]
     radicals = load_radicals(DATA_DIR / "unihan/Unihan.zip")
-    wanted = set(hanzi)
+    wanted = set(chars) | set(hanzi)
     mmah_dict = load_jsonl(DATA_DIR / "makemeahanzi/dictionary.txt", wanted)
     mmah_graphics = load_jsonl(DATA_DIR / "makemeahanzi/graphics.txt", wanted)
 
@@ -575,7 +675,8 @@ def main():
     font = load_static_subset(args.source, "".join(chars) + "".join(sorted(plain)) + BASE_PLAIN)
 
     print("Building color layers...")
-    layers, report = build_color_layers(font, chars, hanzi, radicals, mmah_dict, mmah_graphics, args.neutral)
+    layers, report = build_color_layers(font, chars, hanzi, radicals, mmah_dict, mmah_graphics,
+                                        args.scheme, args.neutral)
     font["COLR"] = buildCOLR(layers, version=0)
     palette = [color for _, color in COLOR_GROUPS] + [color for _, color in ROLE_COLORS]
     font["CPAL"] = buildCPAL([[tuple(int(c[i:i + 2], 16) / 255 for i in (1, 3, 5)) + (1.0,) for c in palette]])
